@@ -1,0 +1,15 @@
+nasm -f elf64 reverse.asm -o reverse.o
+ld reverse.o -o reverse
+./reverse
+
+
+
+
+nasm -f elf64 upper.asm -o upper.o
+ld upper.o -o upper
+./upper
+
+
+
+
+
