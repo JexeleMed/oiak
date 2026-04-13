@@ -1,0 +1,68 @@
+==========================================================
+     OIAK - ASEMBER x86-64 (NASM & GDB)
+==========================================================
+
+1. KOMPILACJA I LINKOWANIE (Z DEBUGIEM)
+----------------------------------------------------------
+# Kompilacja do obiektu (flaga -g dodaje info dla debuggera)
+nasm -f elf64 -g zadanie.asm -o zadanie.o
+
+# Linkowanie do pliku wykonywalnego
+ld zadanie.o -o zadanie
+
+# Uruchomienie
+./zadanie
+
+2. REJESTRY OGOLNEGO PRZEZNACZENIA (64-bit)
+----------------------------------------------------------
+RAX - Accumulator: Matematyka, zwracanie wynikow, nr syscalla.
+RBX - Base: Adresowanie bazowe, dane robocze.
+RCX - Counter: Licznik petli, przesuniecia bitowe.
+RDX - Data: Dane, DL (8-bit) czesto uzywany do SETC.
+RSI - Source Index: Wskaznik zrodla (np. tekst do wypisania).
+RDI - Destination Index: Wskaznik celu (np. adres w buforze).
+RSP - Stack Pointer: Wskaznik szczytu stosu (rosnie w dol!).
+RBP - Base Pointer: Ramka stosu (zmienne lokalne).
+R8 - R15: Dodatkowe rejestry ogolne (dodane w x86-64).
+
+3. FLAGI PROCESORA (RFLAGS)
+----------------------------------------------------------
+CF (Carry Flag) - Przeniesienie (wazne przy ADC i BT).
+ZF (Zero Flag)  - Wynik operacji to zero (wazne przy CMP/JE).
+SF (Sign Flag)  - Wynik ujemny (wazne przy JNS/JS).
+OF (Overflow)   - Przepełnienie dla liczb ze znakiem.
+
+4. PODSTAWOWE INSTRUKCJE
+----------------------------------------------------------
+MOV cel, zrodlo   - Kopiuje dane.
+ADD cel, wart     - Dodaje: cel = cel + wart.
+ADC cel, wart     - Dodaje z przeniesieniem: cel = cel + wart + CF.
+INC / DEC         - Zwieksz / Zmniejsz o 1.
+BT rej, bit_nr    - Testuje bit i kopiuje go do flagi CF.
+SETC rej8         - Ustawia rejestr 8-bit na 1 jesli CF=1, inaczej 0.
+XOR rej, rej      - Najszybszy sposob na wyzerowanie rejestru.
+CMP rej, wart     - Porownuje (odejmuje po cichu i ustawia flagi).
+JMP / JE / JNE    - Skoki: bezwarunkowy / rowny / nierowny.
+JNS               - Skok jesli wynik nieujemny (Jump if Not Sign).
+SYSCALL           - Wywolanie funkcji jadra Linuxa.
+
+5. DEBUGGER GDB - KOMENDY PRZETRWANIA
+----------------------------------------------------------
+gdb ./zadanie           - Uruchomienie debuggera.
+set disassembly-flavor intel - ZMIANA NA SKLADNIE NASM (WAZNE!).
+layout asm              - Widok kodu asemblera.
+layout regs             - Widok rejestrow (odswiezany na zywo).
+break _start (lub b)    - Ustawienie pułapki na starcie.
+run (lub r)             - Start programu.
+nexti (lub ni)          - Krok po kroku (omija procedury).
+stepi (lub si)          - Krok po kroku (wchodzi do procedur).
+info registers (lub i r)- Pokaz wszystkie rejestry.
+p $rax                  - Wypisz wartosc RAX (p/x hex, p/t bin).
+x/gx $rsp               - Pokaz co jest na szczycie stosu.
+continue (lub c)        - Pusc program do konca/nastepnego b.
+quit (lub q)            - Wyjscie z GDB.
+
+6. LINUX SYSCALLS (RAX)
+----------------------------------------------------------
+sys_write (RAX=1): RDI=1(stdout), RSI=adres_tekstu, RDX=dlugosc.
+sys_exit  (RAX=60): RDI=kod_bledu (0 = sukces).
