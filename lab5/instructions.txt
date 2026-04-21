@@ -1,0 +1,333 @@
+nasm -f elf64 tsc_func.asm -o tsc_func.o
+gcc main1.c tsc_func.o -o program1
+./program1
+
+
+
+
+nasm -f elf64 measure.asm -o measure.o
+gcc measure.o -o program2 -no-pie
+./program2
+
+-no-pi
+
+
+
+
+ Gemini
+Asembler i C: RDTSC z wywołaniami
+Nowy czat
+Moje rzeczy
+Gemy
+Czaty
+PTM
+Przypięty czat
+AIZO - projekt
+Przypięty czat
+Dieta
+Przypięty czat
+OIAK - projekt
+Przypięty czat
+Self_project
+Przypięty czat
+Asembler i C: RDTSC z wywołaniami
+Pomoc w zadaniach z architektury komputerów
+Drzewa B i B+ w bazach danych
+Schemat HR w Oracle FreeSQL
+Porównanie jakości muzyki streamingowej
+Rozwiązywanie zadań z praw Kirchhoffa
+Obliczenie oporu zastępczego układu
+Soczewki sferyczne a asferyczne: różnice
+Pomoc w laboratorium sieciowym
+Rozwiązywanie zadań sieciowych z pingiem
+Podział warstwy łącza danych
+Double-Slit Experiment Wavelength Calculation
+Obliczenia prądu w obwodzie elektrycznym
+Wrocław, Polska Na podstawie adresu IP Zaktualizuj lokalizację
+Rozmowa z Gemini
+
+Musze przygotować się na laby z organizacji i architektury komputerów.
+
+Mam przygotować coś takiego. Napisz proszę te dwa programy z komentarzami w kodzie po angielsku. Wytłumacz co się w nich dzieje proszę
+
+napisanie programu w asemblerze ktory bedzie mozliwy do wywolania z C, ktora przyjmuje argument wartosc typu jar i w zaleznosci od tego jaka wartosc przekazemy wykonamy przynjamiej 2 rozne wersje RDTSC, a w c wolanie tej funkcji i wyswietlenie jej na ekranie
+
+
+wersja 2
+
+z poziomu asemblera zawolac rtsdc i odjac te wartosci i wyswietlic funkcja bilbioteczna z c
+
+Cześć! Jasne, pomogę Ci się przygotować na te laby z Architektury Komputerów. Napisanie poprawnego styku pomiędzy C a Asemblerem (tzw. Calling Convention) to klasyk na takich zajęciach.
+
+Zakładam standardowe współczesne środowisko uczelniane, czyli 64-bitowy Linux (architektura x86_64), używając asemblera NASM oraz kompilatora GCC.
+
+Zgodnie z konwencją wywołań (System V AMD64 ABI) w Linuksie:
+
+    Pierwszy argument całkowity/wskaźnikowy (nasz char) trafia do rejestru RDI (a dokładnie do jego najniższego bajtu, czyli DIL).
+
+    Wartość zwracana z funkcji w asemblerze musi znaleźć się w rejestrze RAX.
+
+Oto oba programy wraz ze szczegółowym tłumaczeniem.
+Część 1: Funkcja w Asemblerze wołana z C (z argumentem char)
+
+Wersja ta przyjmuje znak (np. '1' lub '2'). Jeśli przekażemy '1', wykona się zwykła instrukcja RDTSC. Jeśli przekażemy '2', wykona się RDTSCP (wersja serializująca, która upewnia się, że wszystkie poprzednie instrukcje zostały zakończone przed odczytem czasu).
+
+Plik Asemblera: tsc_func.asm
+Fragment kodu
+
+global get_tsc
+
+section .text
+
+; Function signature in C: 
+; unsigned long long get_tsc(char mode);
+get_tsc:
+    ; The 'mode' argument (char) is passed in the DIL register (lowest 8 bits of RDI)
+    
+    cmp dil, '1'        ; Compare argument with character '1'
+    je .use_rdtsc       ; If equal, jump to the standard rdtsc block
+    
+    cmp dil, '2'        ; Compare argument with character '2'
+    je .use_rdtscp      ; If equal, jump to the rdtscp block
+    
+    ; Default case (if neither '1' nor '2')
+    xor rax, rax        ; Return 0
+    ret
+
+.use_rdtsc:
+    rdtsc               ; Reads Time Stamp Counter into EDX:EAX
+    jmp .combine        ; Jump to combine EDX and EAX
+
+.use_rdtscp:
+    rdtscp              ; Reads TSC into EDX:EAX and TSC_AUX into ECX (serializes)
+    jmp .combine
+
+.combine:
+    ; rdtsc/rdtscp stores the lower 32 bits in EAX and the upper 32 bits in EDX.
+    ; We need to return a 64-bit value in RAX.
+    
+    shl rdx, 32         ; Shift the upper 32 bits from RDX to the left by 32 positions
+    or rax, rdx         ; Combine RDX (upper 32 bits) and RAX (lower 32 bits)
+    
+    ret                 ; Return to C (Result is in RAX)
+
+Plik C: main1.c
+C
+
+#include <stdio.h>
+
+// Declare the external assembly function
+extern unsigned long long get_tsc(char mode);
+
+int main() {
+    // Call the function with mode '1' (Standard RDTSC)
+    unsigned long long tsc1 = get_tsc('1');
+    printf("Wartosc TSC (metoda 1 - RDTSC): %llu\n", tsc1);
+
+    // Call the function with mode '2' (Serialized RDTSCP)
+    unsigned long long tsc2 = get_tsc('2');
+    printf("Wartosc TSC (metoda 2 - RDTSCP): %llu\n", tsc2);
+
+    return 0;
+}
+
+Co tu się dzieje?
+
+    Z C przekazujemy char. Trafia on do DIL w asemblerze.
+
+    Robimy cmp (porównanie), aby sprawdzić, co to za znak i robimy skoki warunkowe (je - jump if equal).
+
+    Instrukcje RDTSC oraz RDTSCP mają jedną wspólną cechę: zapisują wynik w dwóch 32-bitowych rejestrach: EDX (starsza część) i EAX (młodsza część).
+
+    Ponieważ chcemy zwrócić jedną 64-bitową liczbę (unsigned long long), musimy połączyć te dwa rejestry. Służy do tego blok .combine: przesuwamy logicznie RDX o 32 bity w lewo, a potem robimy logiczne OR z RAX. Wynik ląduje w całości w RAX.
+
+Część 2: Główny program w Asemblerze wołający printf z C
+
+Tutaj piszemy logikę main w asemblerze. Mierzymy czas wykonania jakiejś pustej pętli, odejmujemy wartości i wołamy printf.
+
+Plik Asemblera: measure.asm
+Fragment kodu
+
+extern printf           ; Import printf from C standard library
+global main             ; Export main so the C runtime can start here
+
+section .data
+    ; Format string for printf. 10 is the newline character (\n), 0 is the null-terminator.
+    fmt db "Zmierzone cykle (roznica): %llu", 10, 0
+
+section .text
+main:
+    ; Prologue: Align stack to 16 bytes. 
+    ; Pushing a 64-bit register subtracts 8 from RSP.
+    push r12            ; We also use R12 to safely store the start time (callee-saved)
+
+    ; --- FIRST MEASUREMENT ---
+    rdtsc               ; Read TSC into EDX:EAX
+    shl rdx, 32         ; Shift EDX left to upper half
+    or rax, rdx         ; Combine into RAX
+    mov r12, rax        ; Store the start time in R12
+
+    ; --- DUMMY WORKLOAD ---
+    ; We run a simple loop to pass some time (cycles)
+    mov rcx, 100000000  ; Loop counter
+.work:
+    dec rcx             ; Decrement counter
+    jnz .work           ; Jump if not zero back to .work
+
+    ; --- SECOND MEASUREMENT ---
+    rdtsc               ; Read TSC again
+    shl rdx, 32
+    or rax, rdx         ; End time is now in RAX
+
+    ; --- CALCULATE DIFFERENCE ---
+    sub rax, r12        ; Subtract start time (R12) from end time (RAX). Result in RAX.
+
+    ; --- CALL PRINTF ---
+    ; System V ABI arguments: RDI (arg1), RSI (arg2)
+    mov rdi, fmt        ; Argument 1: Pointer to the format string
+    mov rsi, rax        ; Argument 2: The calculated difference
+    xor rax, rax        ; Clear RAX (Required for printf to specify 0 floating-point arguments)
+    
+    call printf         ; Call the C standard library function
+
+    ; Epilogue
+    xor rax, rax        ; Return 0 from main
+    pop r12             ; Restore R12 and align stack back
+    ret                 ; Exit program
+
+Co tu się dzieje?
+
+    push r12: Zapisujemy stan rejestru R12 na stosie. Robimy to z dwóch powodów: po pierwsze zabezpieczamy jego wartość (tzw. rejestr callee-saved), po drugie wyrównujemy stos do 16 bajtów przed wywołaniem zewnętrznej funkcji z C (wymóg printf — bez tego program dostanie Segmentation fault).
+
+    Robimy pomiar rdtsc, łączymy wynik i zapisujemy go w R12.
+
+    Kręcimy głupią pętlą .work, żeby zużyć trochę cykli procesora (żeby różnica czasów nie była zerowa).
+
+    Robimy drugi pomiar rdtsc.
+
+    Odejmujemy starą wartość od nowej (sub rax, r12).
+
+    Ustawiamy argumenty pod printf:
+
+        RDI dostaje wskaźnik na nasz tekst (ze zmienną %llu).
+
+        RSI dostaje naszą różnicę w cyklach z RAX.
+
+        Czyścimy RAX (xor rax, rax) - jest to bardzo ważny i częsty powód błędów na labach. Funkcje o zmiennej liczbie argumentów (tzw. variadic functions, jak printf) wymagają, aby w RAX (lub AL) znajdowała się liczba przekazanych argumentów zmiennoprzecinkowych (z rejestrów XMM). My takich nie mamy, więc musi być tam 0.
+
+Jak to skompilować i uruchomić?
+
+W terminalu linuksowym wpisujesz:
+
+Dla Programu 1:
+Bash
+
+nasm -f elf64 tsc_func.asm -o tsc_func.o
+gcc main1.c tsc_func.o -o program1
+./program1
+
+Dla Programu 2:
+Bash
+
+nasm -f elf64 measure.asm -o measure.o
+gcc measure.o -o program2 -no-pie
+./program2
+
+(Uwaga: flaga -no-pie dla GCC czasem jest niezbędna przy kompilowaniu asemblera ze starszymi konwencjami symboli w kodzie.)
+
+jest jeszcze jakis cheat sheet do tych rzeczy. Zapisz mi do pola txt jak dzialaja te programy. Dokladnie. Tym tazem po polsku
+
+Oczywiście, przygotowałem dla Ciebie szczegółowy "Cheat Sheet" (ściągawkę) oraz plik tekstowy z dokładnym opisem działania obu programów w języku polskim.
+Cheat Sheet: Asembler x86_64 & C (Linux)
+
+    Konwencja wywołań (System V ABI):
+
+        Argumenty (liczby/wskaźniki): 1: RDI, 2: RSI, 3: RDX, 4: RCX, 5: R8, 6: R9.
+
+        Wartość zwracana: Zawsze w rejestrze RAX.
+
+        Rejestry zachowywane (Callee-saved): RBX, RBP, R12, R13, R14, R15. Jeśli ich używasz, musisz je odłożyć na stos (push) i przywrócić przed powrotem (pop).
+
+    Instrukcja RDTSC:
+
+        Odczytuje licznik cykli procesora (Time Stamp Counter).
+
+        Wynik jest dzielony: starsze 32 bity trafiają do EDX, młodsze 32 bity do EAX.
+
+        Aby uzyskać pełną liczbę 64-bitową: shl rdx, 32 + or rax, rdx.
+
+    Wyrównanie stosu (Stack Alignment):
+
+        Przed wywołaniem funkcji z biblioteki C (np. printf), wskaźnik stosu RSP musi być wyrównany do 16 bajtów.
+
+        Jeśli Twój program "wywala się" (Segfault) przy call printf, to prawie na pewno wina braku wyrównania stosu.
+
+    Wołanie printf z Asemblera:
+
+        RDI: Adres ciągu formatującego (np. %s, %d).
+
+        RSI, RDX itd.: Kolejne argumenty do wyświetlenia.
+
+        AL / RAX: Musi wynosić 0, jeśli nie przekazujesz argumentów zmiennoprzecinkowych (używamy xor eax, eax).
+
+Poniżej znajduje się wizualizacja tego, co dzieje się w rejestrach podczas wykonywania Twoich programów, aby łatwiej było Ci to sobie wyobrazić na labach.
+
+Twoje pliki z dokładnym opisem po polsku są gotowe.
+
+[file-tag:wyjasnienie_programow_asm]
+
+Twoje pliki z dokładnym opisem po polsku są gotowe.
+Ikona TXT
+ wyjasnieni...gramow_asm 
+TXT
+
+Jeśli będziesz miał jeszcze jakieś wątpliwości przed labami – śmiało pytaj. Powodzenia z Asemblerem!
+
+
+Gemini to AI i może popełniać błędy, także co do ludzi. Twoja prywatność i GeminiOtwiera się w nowym oknie
+
+SZCZEGÓŁOWE WYJAŚNIENIE PROGRAMÓW - LABORATORIUM ARCHITEKTURY KOMPUTERÓW
+
+PROGRAM 1: Wywołanie funkcji Asemblera z poziomu C
+-------------------------------------------------
+Ten program pokazuje, jak przekazać argument z języka wysokiego poziomu (C) do niskiego poziomu (ASM) i zwrócić wynik.
+
+1. Mechanizm przekazywania argumentów:
+   - W systemach 64-bitowych (Linux), pierwszy argument funkcji trafia do rejestru RDI.
+   - Ponieważ nasz argument to 'char' (1 bajt), sprawdzamy tylko najniższą część tego rejestru, czyli DIL.
+   - Instrukcja `cmp dil, '1'` porównuje otrzymany znak z kodem ASCII jedynki.
+
+2. Działanie RDTSC i RDTSCP:
+   - RDTSC (Read Time Stamp Counter): Zwraca liczbę cykli procesora od momentu resetu. Może być wykonana "out-of-order" (poza kolejnością) przez optymalizacje procesora.
+   - RDTSCP: Jest wersją serializującą. Czeka, aż wszystkie poprzednie instrukcje zostaną zakończone, zanim odczyta czas. Dodatkowo zapisuje numer rdzenia procesora w rejestrze ECX (którego w tym przykładzie nie używamy).
+
+3. Łączenie wyniku:
+   - Procesory x86 są 64-bitowe, ale instrukcja RDTSC dla zachowania kompatybilności wstecznej zawsze zapisuje wynik w dwóch rejestrach 32-bitowych: EDX (górne 32 bity) i EAX (dolne 32 bity).
+   - W C zadeklarowaliśmy typ 'unsigned long long' (64 bity). Musimy więc przesunąć EDX o 32 bity w lewo (`shl rdx, 32`) i połączyć go z EAX za pomocą operacji logicznej OR (`or rax, rdx`). Wynik końcowy w RAX jest zwracany do C.
+
+PROGRAM 2: Wołanie funkcji bibliotecznej C (printf) z poziomu Asemblera
+----------------------------------------------------------------------
+Ten program pokazuje, jak asembler może stać się "głównym zarządcą" i korzystać z gotowych funkcji systemowych.
+
+1. Struktura sekcji:
+   - Sekcja '.data': Tu definiujemy ciągi znaków (stringi). Pamiętaj, że każdy string w C musi kończyć się bajtem zerowym (null-terminator), dlatego dodajemy '0' na końcu definicji.
+   - Sekcja '.text': Tu znajduje się kod programu.
+
+2. Wyrównanie stosu (Stack Alignment) - KLUCZOWY MOMENT:
+   - Standard ABI wymaga, aby przed wywołaniem funkcji zewnętrznej (call), stos (rejestr RSP) był wyrównany do 16 bajtów.
+   - Instrukcja `push r12` na początku programu robi dwie rzeczy:
+     a) Zabezpiecza wartość rejestru R12, którego będziemy używać (rejestr callee-saved).
+     b) Przesuwa stos o 8 bajtów. Ponieważ wywołanie 'main' przez system już odjęło 8 bajtów (adres powrotu), nasze 'push' sprawia, że stos jest łącznie przesunięty o 16 bajtów - jest idealnie wyrównany.
+
+3. Wywołanie printf:
+   - Rejestr RDI musi wskazywać na adres tekstu formatującego (`mov rdi, fmt`).
+   - Rejestr RSI musi zawierać wartość, którą chcemy wstawić w miejsce '%llu'.
+   - `xor eax, eax`: To wyzerowanie rejestru RAX (a dokładnie jego dolnej części EAX). Funkcja printf w wersji 64-bitowej sprawdza ten rejestr, aby wiedzieć, ile argumentów zmiennoprzecinkowych (float/double) przekazano w rejestrach XMM. Jeśli tam nie będzie zera, program może się zawiesić.
+
+4. Obliczanie różnicy:
+   - Mierzymy czas przed pętlą i po pętli.
+   - Używamy instrukcji `sub rax, r12` (wynik końcowy minus wynik początkowy), aby dowiedzieć się, ile dokładnie cykli zajęło wykonanie kodu.
+
+wyjasnienie_programow_asm.txt
+Wyświetlam wyjasnienie_programow_asm.txt.
+
