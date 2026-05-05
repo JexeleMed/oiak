@@ -1,0 +1,61 @@
+================================================================================
+OIAK - UKŁAD ZMIENNOPRZECINKOWY (FPU / IEEE 754) - NOTATKI DO NAUKI
+================================================================================
+
+1. STANDARD IEEE 754 (Single Precision - 32 bity)
+--------------------------------------------------------------------------------
+Reprezentacja liczby w pamięci: [Z][EEEEEEEE][MMMMMMMMMMMMMMMMMMMMMMM]
+- Znak (1 bit): 0 = dodatnia, 1 = ujemna.
+- Wykładnik (8 bitów): Przesunięty o Bias (127). Rzeczywisty wykładnik = E - 127.
+- Mantysa (23 bity): Część ułamkowa. Domyślnie zaczyna się od "1." (tzw. hidden bit).
+
+Wzór: Liczba = (-1)^Znak * 2^(E-127) * 1.Mantysa
+
+2. CAŁKOWANIE NUMERYCZNE NA SPRZĘCIE
+--------------------------------------------------------------------------------
+FPU nie liczy całek symbolicznych. Robi to przez aproksymację (sumowanie pól):
+- Metoda prostokątów/trapezów: Dzielenie obszaru na miliony małych fragmentów.
+- Pętla: Suma = Suma + (Wysokość * Szerokość_kroku).
+- FMA (Fused Multiply-Add): Sprzętowa instrukcja (A * B + C) wykonująca 
+  mnożenie i dodawanie w jednym cyklu bez zaokrąglania pośredniego (większa celność).
+
+3. WYJĄTKI FPU (IEEE 754 EXCEPTIONS)
+--------------------------------------------------------------------------------
+1. Invalid Operation: Wynik to NaN (Not a Number). Np. sqrt(-1), 0/0, inf-inf.
+2. Division by Zero: Wynik to +/- Infinity.
+3. Overflow (Przepełnienie): Wynik zbyt duży dla formatu danych (leci do Inf).
+4. Underflow (Niedomiar): Liczba zbyt mała (bliska zeru), utrata precyzji.
+5. Inexact: Najczęstszy. Wynik musiał zostać zaokrąglony (brak miejsca w mantysie).
+
+4. STEROWANIE I DOKŁADNOŚĆ
+--------------------------------------------------------------------------------
+- Rejestr Kontrolny (Control Word): Służy do ustawiania trybów pracy FPU.
+- Tryby zaokrąglania: Do najbliższej (default), do zera, do +inf, do -inf.
+- Maskowanie wyjątków: Decydujesz, czy błąd (np. 1/0) ma przerwać program (trap),
+  czy FPU ma po cichu wpisać "Inf" i liczyć dalej.
+- Błędy precyzji: Liczby takie jak 0.1 są okresowe binarnie, co generuje błędy 
+  w sumowaniu (np. 0.1 + 0.2 != 0.3).
+
+5. CHEAT SHEET: ASSEMBLER FPU (x87)
+--------------------------------------------------------------------------------
+KONFIGURACJA:
+- FINIT        ; Inicjalizacja/Reset FPU.
+- FSTCW mem    ; Store Control Word (zapisuje ustawienia do pamięci).
+- FLDCW mem    ; Load Control Word (ładuje ustawienia, np. tryb zaokrąglania).
+- FSTSW AX     ; Store Status Word (zapisuje stan flag do rejestru AX).
+
+TRANSFER DANYCH (STOS ST(0)-ST(7)):
+- FLD mem      ; Load: Wrzuca liczbę z pamięci na wierzchołek stosu ST(0).
+- FSTP mem     ; Store and Pop: Zdejmuje liczbę z ST(0) i zapisuje w pamięci.
+- FST mem      ; Store: Kopiuje ST(0) do pamięci bez zdejmowania ze stosu.
+- FLDPI        ; Wrzuca stałą PI na wierzchołek stosu.
+
+ARYTMETYKA:
+- FADD         ; ST(1) = ST(1) + ST(0), potem Pop (wynik w nowym ST(0)).
+- FSUB         ; ST(1) = ST(1) - ST(0), potem Pop.
+- FMUL         ; Mnożenie (kluczowe przy polach prostokątów w całkach).
+- FDIV         ; Dzielenie (wolna operacja).
+- FABS         ; Wartość bezwzględna z ST(0).
+- FCHS         ; Zmiana znaku ST(0) (Change Sign).
+
+================================================================================
