@@ -1,46 +1,93 @@
-extern printf           ; Import printf from C standard library
-global main             ; Export main so the C runtime can start here
+extern printf
+global main
 
 section .data
-    ; Format string for printf. 10 is the newline character (\n), 0 is the null-terminator.
-    fmt db "Zmierzone cykle (roznica): %llu", 10, 0
+    fmt db "Zmierzone cykle (z narzutem stopera): %llu", 10, 0
 
 section .text
 main:
-    ; Prologue: Align stack to 16 bytes. 
-    ; Pushing a 64-bit register subtracts 8 from RSP.
-    push r12            ; We also use R12 to safely store the start time (callee-saved)
+    ; =========================================================================
+    ; 1. PROLOG I WYRÓWNANIE STOSU (ABI COMPLIANCE)
+    ; =========================================================================
+    ; System V ABI wymaga zachowania rejestrów callee-saved (RBX, R12-R15).
+    ; Instrukcja CPUID bezwzględnie niszczy RBX, więc musimy go zabezpieczyć.
+    ; Wrzucenie dokładnie 5 rejestrów (5 * 8 = 40 bajtów) idealnie wyrównuje 
+    ; stos do 16 bajtów (Wejście: RSP % 16 == 8 -> po sub 40: RSP % 16 == 0).
+    push rbx
+    push r12
+    push r13
+    push r14
+    push r15
 
-    ; --- FIRST MEASUREMENT ---
-    rdtsc               ; Read TSC into EDX:EAX
-    shl rdx, 32         ; Shift EDX left to upper half
-    or rax, rdx         ; Combine into RAX
-    mov r12, rax        ; Store the start time in R12
+    ; =========================================================================
+    ; 2. SERIALIZACJA PRZED STARTEM (CZYSZCZENIE POTOKU)
+    ; =========================================================================
+    xor eax, eax        ; Funkcja 0 dla CPUID
+    cpuid               ; Twarda bariera: czeka, aż wszystkie wcześniejsze 
+                        ; instrukcje całkowicie opuszczą potok procesora.
 
-    ; --- DUMMY WORKLOAD ---
-    ; We run a simple loop to pass some time (cycles)
-    mov rcx, 100000000  ; Loop counter
-.work:
-    dec rcx             ; Decrement counter
-    jnz .work           ; Jump if not zero back to .work
-
-    ; --- SECOND MEASUREMENT ---
-    rdtsc               ; Read TSC again
-    shl rdx, 32
-    or rax, rdx         ; End time is now in RAX
-
-    ; --- CALCULATE DIFFERENCE ---
-    sub rax, r12        ; Subtract start time (R12) from end time (RAX). Result in RAX.
-
-    ; --- CALL PRINTF ---
-    ; System V ABI arguments: RDI (arg1), RSI (arg2)
-    mov rdi, fmt        ; Argument 1: Pointer to the format string
-    mov rsi, rax        ; Argument 2: The calculated difference
-    xor rax, rax        ; Clear RAX (Required for printf to specify 0 floating-point arguments)
+    ; =========================================================================
+    ; 3. START POMIARU (CRITICAL PATH - FAZA WEJŚCIOWA)
+    ; =========================================================================
+    rdtsc               ; Odczyt licznika do EDX:EAX.
     
-    call printf         ; Call the C standard library function
+    ; MIKROARCHITEKTONICZNA OPTYMALIZACJA:
+    ; W starym kodzie robiłeś SHL i OR wewnątrz mierzonego okna. To błąd!
+    ; Traciłeś cenne cykle na mierzenie własnej logiki składania bitów.
+    ; Zamiast tego robimy szybki zrzut do rejestrów 32-bitowych (1 cykl).
+    ; Zapis do r12d automatycznie i darmowo zeruje górne 32 bity rejestru R12!
+    mov r12d, eax       ; Zrzut dolnych 32 bitów STARTU
+    mov r13d, edx       ; Zrzut górnych 32 bitów STARTU
 
-    ; Epilogue
-    xor rax, rax        ; Return 0 from main
-    pop r12             ; Restore R12 and align stack back
-    ret                 ; Exit program
+    ; =========================================================================
+    ; --- MIEJSCE NA TWÓJ MIERZONY KOD ---
+    ; Aby zmierzyć czysty narzut (baseline) samego stopera, zostaw to puste!
+    ; =========================================================================
+    
+    ; fsqrt             ; Odkomentuj, aby zmierzyć pojedynczą instrukcję
+
+    ; =========================================================================
+    ; 4. STOP POMIARU (CRITICAL PATH - FAZA WYJŚCIOWA)
+    ; =========================================================================
+    rdtscp              ; Instrukcja częściowo serializująca. Czeka, aż KOD 
+                        ; powyżej fizycznie się zakończy. Wynik w EDX:EAX.
+    mov r14d, eax       ; Zrzut dolnych 32 bitów KOŃCA
+    mov r15d, edx       ; Zrzut górnych 32 bitów KOŃCA
+
+    ; =========================================================================
+    ; 5. SERIALIZACJA KOŃCOWA (BLOKADA OGONA)
+    ; =========================================================================
+    xor eax, eax
+    cpuid               ; Gwarantuje, że instrukcje poniżej (składanie bitów,
+                        ; printf) nie wejdą spekulatywnie w okno pomiarowe.
+
+    ; =========================================================================
+    ; 6. OBLICZENIA (POZA ŚCIEŻKĄ KRYTYCZNĄ)
+    ; =========================================================================
+    ; Teraz bezpiecznie składamy 64-bitowy START w rejestrze R12
+    shl r13, 32
+    or r12, r13
+
+    ; Składamy 64-bitowy STOP w rejestrze R14
+    shl r15, 32
+    or r14, r15
+
+    ; Obliczenie różnicy: R14 = STOP - START
+    sub r14, r12
+
+    ; =========================================================================
+    ; 7. WYPISANIE WYNIKU I EPILOG
+    ; =========================================================================
+    mov rdi, fmt        ; Arg 1: wskaźnik na string
+    mov rsi, r14        ; Arg 2: wynik w cyklach
+    xor eax, eax        ; Czyszczenie EAX dla printf (0 funkcji wektorowych)
+    call printf
+
+    ; Przywrócenie rejestrów i powrót
+    xor eax, eax        ; Kod ret = 0
+    pop r15
+    pop r14
+    pop r13
+    pop r12
+    pop rbx
+    ret

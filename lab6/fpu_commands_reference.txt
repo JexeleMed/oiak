@@ -1,0 +1,82 @@
+================================================================================
+KOMPENDIUM KOMEND FPU (x87) - ARCHITEKTURA I ORGANIZACJA KOMPUTERÓW
+================================================================================
+
+1. PODSTAWY ARCHITEKTURY STOSU x87
+--------------------------------------------------------------------------------
+- Rejestry: 8 rejestrów 80-bitowych (ST(0) do ST(7)).
+- ST(0): Wierzchołek stosu (Top of Stack).
+- TOP: 3-bitowy wskaźnik w rejestrze Status Word wskazujący na ST(0).
+- Tag Word: 16-bitowy rejestr opisujący stan slotów (Valid, Zero, Special, Empty).
+
+2. TRANSFER DANYCH (ŁADOWANIE I ZAPIS)
+--------------------------------------------------------------------------------
+FLD <src>    - Push: Ładuje wartość na stos (staje się nowym ST(0)).
+FILD <src>   - Push: Ładuje liczbę całkowitą (Integer) i konwertuje na Float.
+FST <dest>   - Store: Kopiuje ST(0) do pamięci RAM (bez zdejmowania).
+FSTP <dest>  - Store & Pop: Kopiuje ST(0) do pamięci i zdejmuje go ze stosu.
+FISTP <dest> - Store & Pop: Konwertuje ST(0) na Integer i zapisuje do RAM.
+FXCH ST(i)   - Exchange: Zamienia ST(0) z rejestrem ST(i). Koszt: 0 cykli.
+
+ŁADOWANIE STAŁYCH (Zawsze PUSH):
+FLD1         - Ładuje 1.0
+FLDZ         - Ładuje 0.0
+FLDPI        - Ładuje liczbę PI
+FLDL2E       - Ładuje log2(e)
+FLDLN2       - Ładuje ln(2)
+
+3. ARYTMETYKA (OPIS SKRÓCONY)
+--------------------------------------------------------------------------------
+Zasada nazw:
+- brak literki: operacja na ST(0) i argumencie.
+- 'P' na końcu: wykonaj operację i zdejmij ST(0) ze stosu (Pop).
+- 'R' w środku: odwróć kolejność operandów (Reverse).
+- 'I' na początku: operandem jest liczba całkowita z pamięci.
+
+DODAWANIE:
+FADD <mem>   - ST(0) = ST(0) + [mem]
+FADD ST(i),ST(0) - ST(i) = ST(i) + ST(0)
+FADDP ST(i),ST(0) - ST(i) = ST(i) + ST(0), potem Pop ST(0)
+
+ODEJMOWANIE:
+FSUB <mem>   - ST(0) = ST(0) - [mem]
+FSUBP ST(i),ST(0) - ST(i) = ST(i) - ST(0), potem Pop ST(0)
+FSUBR <mem>  - ST(0) = [mem] - ST(0) (Reverse)
+FSUBRP ST(i),ST(0) - ST(i) = ST(0) - ST(i), potem Pop ST(0)
+
+MNOŻENIE / DZIELENIE:
+FMUL / FMULP - Mnożenie (analogicznie do dodawania)
+FDIV / FDIVP - Dzielenie: ST(0) = ST(0) / arg
+FDIVR / FDIVRP - Dzielenie odwrotne: ST(0) = arg / ST(0)
+
+4. OPERACJE MATEMATYCZNE I SPECJALNE
+--------------------------------------------------------------------------------
+FABS         - Wartość bezwzględna z ST(0).
+FCHS         - Zmiana znaku ST(0) (Change Sign).
+FSQRT        - Pierwiastek kwadratowy z ST(0).
+FROUND       - Zaokrąglenie ST(0) wg trybu w Control Word.
+FPTAN        - Tangens: Wylicza tan(ST(0)), zostawia wynik, potem Push 1.0.
+FPATAN       - Arcus Tangens: ST(1) = atan(ST(1)/ST(0)), potem Pop.
+FSIN / FCOS  - Sinus / Cosinus z ST(0) (w radianach).
+FSINCOS      - Jednocześnie Sin i Cos: ST(0)=Sin, Push Cos.
+
+5. PORÓWNANIA I STEROWANIE
+--------------------------------------------------------------------------------
+FCOM <src>   - Porównaj ST(0) z src, ustaw flagi w Status Word.
+FCOMP <src>  - Porównaj i Pop.
+FCOMPP       - Porównaj ST(0) z ST(1) i wykonaj dwa razy Pop.
+FCOMI / FCOMIP - Porównaj i ustaw flagi bezpośrednio w EFLAGS (nie trzeba FSTSW).
+FUCOMI / FUCOMIP - Porównanie bezpieczne (Unordered) - nie rzuca wyjątku dla NaN.
+
+FINIT        - Reset koprocesora, czyszczenie stosu, stan domyślny.
+FLDCW <mem>  - Załadowanie Control Word (np. zmiana trybu zaokrąglania).
+FSTCW <mem>  - Zapisanie Control Word do pamięci.
+FSTSW AX     - Zapisanie Status Word do rejestru AX (sprawdzanie wyników porównań).
+
+6. UWAGI OIAK - NA CZYM ZAGINA PROWADZĄCY:
+--------------------------------------------------------------------------------
+- Przepełnienie stosu: Następuje po 8 instrukcjach FLD bez żadnego Pop. Wynik: NaN.
+- Precyzja: FPU pracuje wewnętrznie na 80 bitach, ale FSTP do 'double' ucina do 64.
+- Register Renaming: FXCH jest darmowy (0 cykli) na nowoczesnych procesorach.
+- Wyjątki: Można je maskować w Control Word, wtedy FPU nie przerywa programu.
+================================================================================
