@@ -23,21 +23,21 @@ int main() {
 
     /* Test 1: dostęp wierszami [i][j] vs kolumnami [j][i]
      * Wierszami = kolejne adresy → trafienia cache; kolumnami = skoki o wiersz → chybienia */
-    printf("Odczyt dla [i][j] oraz [j][i]\n");
+    printf("Czytanie dla [i][j] oraz [j][i]\n");
 
     t0 = perf_open();
     for (int i = 0; i < DIM; i++)
         for (int j = 0; j < DIM; j++)
             val = grid[i][j];
     t1 = perf_close_x();
-    printf("Odczyt wierszami [i][j]: %llu cykli\n", (unsigned long long)(t1 - t0));
+    printf("Czytanie wierszami [i][j]: %llu cykli\n", (unsigned long long)(t1 - t0));
 
     t0 = perf_open();
     for (int i = 0; i < DIM; i++)
         for (int j = 0; j < DIM; j++)
             val = grid[j][i];
     t1 = perf_close_x();
-    printf("Odczyt kolumnami [j][i]: %llu cykli\n\n", (unsigned long long)(t1 - t0));
+    printf("Czytanie kolumnami [j][i]: %llu cykli\n\n", (unsigned long long)(t1 - t0));
 
     /* Test 2: wykrywanie rozmiaru linii cache
      * Przy stride < rozmiar_linii/4 wiele odczytów korzysta z tej samej linii → mniej chybień.
