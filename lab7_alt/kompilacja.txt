@@ -1,0 +1,24 @@
+Kompilacja i uruchomienie (Xubuntu x86-64)
+==========================================
+
+Krok 1 - asemblacja:
+    as -o helper.o helper.asm
+
+Krok 2 - kompilacja i linkowanie:
+    gcc -O2 -o cache_detect cache_detect.c helper.o
+
+Uruchomienie:
+    ./cache_detect
+
+--- Alternatywa: jedno polecenie ---
+    gcc -O2 -o cache_detect cache_detect.c -x assembler helper.asm
+
+--- Opcjonalnie: stabilniejsze wyniki TSC ---
+
+Przypięcie do jednego rdzenia:
+    taskset -c 0 ./cache_detect
+
+Wyłączenie skalowania częstotliwości (wymaga sudo):
+    sudo cpupower frequency-set -g performance
+    ./cache_detect
+    sudo cpupower frequency-set -g powersave
