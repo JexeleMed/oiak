@@ -21,23 +21,33 @@
 #include <stdint.h>
 #include <string.h>
 
-#define MAX_ARRAY  (1 << 19)   /* 512 KB */
-#define GROUP_SZ   64          /* x86-64 cache line size used for grouping */
+#define MAX_ARRAY  (1 << 19)   /* 512 KB — must be >> L1D (typ. 32-64 KB) */
 #define N_CHASE    (1 << 20)   /* target pointer chases per sample */
+
+#define STRIDE_THRESH  0.75    /* fraction of plateau to declare line-size hit */
+#define SIZE_THRESH    1.50    /* adjacent-ratio jump signalling L1D boundary  */
 
 static inline uint64_t rdtsc(void)
 {
+#if defined(__x86_64__) || defined(__i386__)
     uint32_t lo, hi;
     __asm__ volatile ("rdtsc" : "=a"(lo), "=d"(hi));
     return ((uint64_t)hi << 32) | lo;
+#elif defined(__aarch64__)
+    uint64_t val;
+    __asm__ volatile ("mrs %0, cntvct_el0" : "=r"(val));
+    return val;
+#else
+#error "Unsupported architecture: no cycle counter available"
+#endif
 }
 
-static void build_list(char *buf, int arr_bytes, int stride)
+static void build_list(char *buf, int arr_bytes, int stride, int group_sz)
 {
     int npl, ngroups;
-    if (stride <= GROUP_SZ) {
-        npl     = GROUP_SZ / stride;
-        ngroups = arr_bytes / GROUP_SZ;
+    if (stride <= group_sz) {
+        npl     = group_sz / stride;
+        ngroups = arr_bytes / group_sz;
     } else {
         npl     = 1;
         ngroups = arr_bytes / stride;
@@ -63,13 +73,13 @@ static void build_list(char *buf, int arr_bytes, int stride)
     free(order);
 }
 
-static double measure(char *buf, int arr_bytes, int stride)
+static double measure(char *buf, int arr_bytes, int stride, int group_sz)
 {
     int n    = arr_bytes / stride;
     int reps = N_CHASE / n;
     if (reps < 4) reps = 4;
 
-    build_list(buf, arr_bytes, stride);
+    build_list(buf, arr_bytes, stride, group_sz);
 
     uint64_t best = UINT64_MAX;
     for (int t = 0; t < 3; t++) {
@@ -90,7 +100,7 @@ static int stride_jump(double *v, int n)
 {
     double vmax = 0.0;
     for (int i = 0; i < n; i++) if (v[i] > vmax) vmax = v[i];
-    for (int i = 0; i < n; i++) if (v[i] >= 0.75 * vmax) return i;
+    for (int i = 0; i < n; i++) if (v[i] >= STRIDE_THRESH * vmax) return i;
     return n - 1;
 }
 
@@ -98,7 +108,7 @@ static int stride_jump(double *v, int n)
 static int size_jump(double *v, int n)
 {
     for (int i = 1; i < n; i++)
-        if (v[i] > 1.5 * v[i - 1]) return i;
+        if (v[i] > SIZE_THRESH * v[i - 1]) return i;
     return n - 1;
 }
 
@@ -110,16 +120,21 @@ int main(void)
     memset(buf, 0, MAX_ARRAY);
 
     /* Stride sweep */
+    /* max stride sets upper bound on detectable line size */
     int    strides[] = { 8, 16, 32, 64, 128, 256 };
     int    ns = (int)(sizeof strides / sizeof strides[0]);
     double sv[16];
 
+    /* group_sz = max stride: guaranteed >= actual line size on any known CPU,
+     * so spatial locality within a group is determined by hardware, not group_sz */
+    int group_sz = strides[ns - 1];
+
     for (int i = 0; i < ns; i++)
-        sv[i] = measure(buf, MAX_ARRAY, strides[i]);
+        sv[i] = measure(buf, MAX_ARRAY, strides[i], group_sz);
     int li      = stride_jump(sv, ns);
     int line_sz = strides[li];
 
-    printf("=== Stride sweep  (array = 512 KB, groups = %d B) ===\n", GROUP_SZ);
+    printf("=== Stride sweep  (array = 512 KB, group_sz = %d B) ===\n", group_sz);
     printf("%-10s  %14s  %8s\n", "Stride(B)", "Cycles/acc", "Ratio");
     for (int i = 0; i < ns; i++) {
         double r = (i == 0) ? 1.0 : sv[i] / sv[i - 1];
@@ -133,7 +148,7 @@ int main(void)
     for (int s = 1024; s <= MAX_ARRAY; s <<= 1) sizes[nsz++] = s;
     double av[20];
     for (int i = 0; i < nsz; i++)
-        av[i] = measure(buf, sizes[i], line_sz);
+        av[i] = measure(buf, sizes[i], line_sz, line_sz);
     int si = size_jump(av, nsz);
 
     printf("=== Size sweep  (stride = %d B) ===\n", line_sz);
