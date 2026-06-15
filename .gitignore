@@ -1,5 +1,15 @@
 .DS_Store
-
 *.o
+*.swp
+.claude/
 
-
+# executables
+lab/reverse/reverse
+lab4/large_numbers_adder
+lab5/program*
+lab6/program
+lab6/program_alt
+lab7/lab7
+lab7_alt/cache_detect
+lab7_alt/cache_detect_dbg
+lab8/integrate
