@@ -1,67 +1,44 @@
-/*
- * main.c -- numeryczne calkowanie f(x) = e^x na [a, b] metoda prostokatow
- * (punkt srodkowy), z pomiarem czasu w cyklach procesora (RDTSC).
- *
- * Trzy wersje:
- *   1) integrate_scalar   -- naiwna petla, exp() z libm dla kazdego punktu
- *   2) integrate_simd_exp -- petla AVX, e^x liczone uczciwie dla kazdego
- *      punktu, ale wektorowo (redukcja zakresu + wielomian, simd.asm);
- *      pokazuje, ile daje SAMA wektoryzacja
- *   3) integrate_simd_geo -- petla AVX + trik algorytmiczny: e^(a+ih) to
- *      ciag geometryczny, wiec exp() liczymy tylko 17 razy na starcie,
- *      a w petli sa juz same mnozenia
- *
- * Weryfikacja poprawnosci jest darmowa: dokladna wartosc to e^b - e^a.
- */
 #include <stdio.h>
 #include <stdlib.h>
 #include <stdint.h>
 #include <math.h>
 
-/* funkcje z simd.asm */
 uint64_t tsc_start(void);
 uint64_t tsc_stop(void);
 double   simd_geo_sum(const double *init, double factor, uint64_t iters);
 double   simd_exp_sum(double x0, double h, uint64_t iters);
 
-#define LANES 16   /* tyle punktow przerabia jedna iteracja petli SIMD */
-#define REPS  9    /* powtorzenia pomiaru -- bierzemy najlepszy wynik */
+#define LANES 16   /* 4 rejestry ymm * 4 double */
+#define REPS  9
 
-/* ---- wersja liniowa (baseline): exp() w kazdej iteracji ---- */
 static double integrate_scalar(double a, double b, uint64_t n)
 {
     double h = (b - a) / (double)n;
     double sum = 0.0;
     for (uint64_t i = 0; i < n; i++)
-        sum += exp(a + ((double)i + 0.5) * h);   /* punkt srodkowy podprzedzialu */
+        sum += exp(a + ((double)i + 0.5) * h);
     return sum * h;
 }
 
-/* ---- wersja SIMD "uczciwa": wektorowy exp, 4 punkty na iteracje ---- */
 static double integrate_simd_exp(double a, double b, uint64_t n)
 {
     double h = (b - a) / (double)n;
     return simd_exp_sum(a + 0.5 * h, h, n / 4) * h;
 }
 
-/* ---- wersja SIMD + trik geometryczny: C tylko przygotowuje dane ---- */
 static double integrate_simd_geo(double a, double b, uint64_t n)
 {
     double h = (b - a) / (double)n;
 
-    /* 16 pierwszych wartosci funkcji -- punkty startowe dla 4 wektorow ymm */
     double init[LANES];
     for (int i = 0; i < LANES; i++)
         init[i] = exp(a + ((double)i + 0.5) * h);
 
-    /* mnoznik przesuwajacy o 16 punktow: e^(x+16h) = e^x * e^(16h) */
     double factor = exp((double)LANES * h);
 
     return simd_geo_sum(init, factor, n / LANES) * h;
 }
 
-/* Narzut samego pomiaru (tsc_start + tsc_stop bez niczego w srodku).
- * Mierzymy go wiele razy i bierzemy minimum, potem odejmujemy od wynikow. */
 static uint64_t measure_overhead(void)
 {
     uint64_t best = UINT64_MAX;
@@ -74,13 +51,13 @@ static uint64_t measure_overhead(void)
     return best;
 }
 
-/* zapobiega wyrzuceniu obliczen przez optymalizator */
+/* volatile: bez tego -O2 usuwa obliczenia jako "nieuzywane" */
 static volatile double sink;
 
 int main(int argc, char **argv)
 {
     double   a = 0.0, b = 1.0;
-    uint64_t n = 1u << 24;            /* 16M punktow, podzielne przez 16 */
+    uint64_t n = 1u << 24;
 
     if (argc == 4) {
         a = atof(argv[1]);
@@ -95,8 +72,6 @@ int main(int argc, char **argv)
     uint64_t overhead = measure_overhead();
     double   exact    = exp(b) - exp(a);
 
-    /* kazda wersje liczymy REPS razy i bierzemy najszybszy przebieg --
-     * minimum najlepiej przybliza "czysty" czas bez zaklocen od systemu */
     struct {
         const char *name;
         double (*fn)(double, double, uint64_t);
